@@ -70,12 +70,13 @@ make down
 ari-e2e/
 ├── playwright.config.ts          # Playwright configuration
 ├── Makefile                      # Task runner
+├── ARCHITECTURE.md               # Test architecture guide (AI context)
 ├── .env.example                  # Environment variables template
 │
 ├── docker/
 │   ├── compose.e2e.yaml          # Docker Compose (MariaDB)
 │   ├── compose.e2e-sqlite.yaml   # Docker Compose (SQLite)
-│   ├── mock-google/              # Google OAuth + Contacts API mock
+│   ├── mock-google/              # Google OAuth + People API mock
 │   └── mock-telegram/            # Telegram Bot API mock
 │
 ├── scripts/
@@ -87,18 +88,60 @@ ari-e2e/
 └── tests/
     ├── global-setup.ts           # Runs before all tests (DB reset)
     ├── global-teardown.ts        # Runs after all tests (cleanup)
+    │
     ├── fixtures/                 # Shared test fixtures
-    │   ├── test-data.ts          # Seed data constants
-    │   ├── auth.fixture.ts       # Pre-authenticated page fixture
+    │   ├── test-data.ts          # Seed data + mock constants
+    │   ├── auth.fixture.ts       # Pre-authenticated page (read-only tests)
+    │   ├── auth-userb.fixture.ts # Pre-authenticated as User B
     │   └── user-context.fixture.ts  # Isolated user per test
+    │
+    ├── helpers/                  # Utility functions for tests
+    │   ├── auth.helper.ts        # Login helper
+    │   ├── mailpit.helper.ts     # Email mock API
+    │   ├── mock-google.helper.ts # Google mock admin API
+    │   └── mock-telegram.helper.ts # Telegram mock admin API
+    │
     ├── pages/                    # Page Object Models
     │   ├── LoginPage.ts
     │   ├── RegisterPage.ts
-    │   └── DashboardPage.ts
-    └── auth/                     # Auth test suite
-        ├── login.spec.ts
-        ├── register.spec.ts
-        └── logout.spec.ts
+    │   ├── DashboardPage.ts
+    │   ├── ContactsListPage.ts
+    │   ├── ContactFormPage.ts
+    │   ├── ContactDetailsPage.ts
+    │   ├── GroupsListPage.ts
+    │   ├── GroupFormPage.ts
+    │   ├── NotificationChannelsPage.ts
+    │   ├── NotificationChannelFormPage.ts
+    │   ├── NotificationPoliciesPage.ts
+    │   └── NotificationPolicyFormPage.ts
+    │
+    ├── auth/                     # Auth flow tests
+    │   ├── login.spec.ts
+    │   ├── register.spec.ts
+    │   └── logout.spec.ts
+    ├── contacts/                 # Contacts CRUD + search + isolation
+    │   ├── contacts-list.spec.ts
+    │   ├── contacts-crud.spec.ts
+    │   ├── contacts-search.spec.ts
+    │   ├── contact-details.spec.ts
+    │   └── tenant-isolation.spec.ts
+    ├── groups/                   # Groups CRUD + filtering
+    │   ├── groups-crud.spec.ts
+    │   └── groups-filter.spec.ts
+    ├── dashboard/
+    │   └── dashboard.spec.ts
+    ├── export/
+    │   └── export.spec.ts
+    ├── settings/
+    │   ├── sessions.spec.ts
+    │   └── audit-logs.spec.ts
+    ├── notifications/            # Channels, policies, delivery
+    │   ├── channels-crud.spec.ts
+    │   ├── policies-crud.spec.ts
+    │   ├── delivery.spec.ts          # Email delivery via Mailpit
+    │   └── telegram-delivery.spec.ts # Telegram delivery via mock
+    └── google-import/
+        └── google-import.spec.ts     # Google OAuth + contacts import
 ```
 
 ## Make Targets
@@ -186,10 +229,11 @@ Tests that modify data should use the **isolated user fixture** instead of the s
 import { test, expect } from '../fixtures/user-context.fixture'
 
 test('my test with isolated data', async ({ userContext }) => {
-  // userContext.uuid     — unique user ID (e2e-<timestamp>-<random>)
-  // userContext.token    — valid JWT token
-  // userContext.email    — user's email
-  // userContext.page     — Playwright page
+  // userContext.uuid       — unique user ID (e2e-<timestamp>-<random>)
+  // userContext.token      — valid JWT token
+  // userContext.email      — user's email
+  // userContext.userId     — numeric DB user ID (needed for Telegram webhook)
+  // userContext.page       — Playwright page
   // userContext.apiContext — Playwright API request context
 
   // The user is automatically deleted after the test
@@ -224,6 +268,12 @@ Tests are tagged for selective execution:
 
 - `@smoke` — critical path, run on every PR
 - `@critical` — core functionality that must not break
+- `@crud` — CRUD operation tests
+- `@notifications` — notification pipeline tests
+- `@delivery` — notification delivery tests
+- `@google` — Google integration tests
+- `@telegram` — Telegram integration tests
+- `@slow` — tests that take longer (async processing)
 
 Run tagged tests: `npx playwright test --grep @smoke`
 
@@ -234,28 +284,46 @@ These endpoints only exist when `APP_ENV=e2e` and `E2E_MODE=1`:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/e2e/reset` | Truncate all tables and re-seed |
-| POST | `/api/e2e/create-user` | Create isolated test user, returns `{ token, email }` |
+| POST | `/api/e2e/create-user` | Create isolated test user, returns `{ token, email, userId }` |
 | DELETE | `/api/e2e/user/{uuid}` | Delete a test user and all their data |
 | POST | `/api/e2e/cleanup-orphaned-users` | Remove users matching `e2e-%` except seed users |
-| POST | `/api/e2e/exec-command` | Run whitelisted Symfony commands |
+| POST | `/api/e2e/exec-command` | Run whitelisted Symfony commands (`ari:notification:generate`, `ari:notification:process`, `messenger:consume`) |
+| POST | `/api/e2e/verify-channel/{id}` | Force-verify a notification channel (sets `verifiedAt`) |
 
 ## Mock Services
 
 ### Google Mock (port 4020)
 
-Implements OAuth flow and People/Contact Groups APIs. The app's `GOOGLE_AUTH_URL` points to this mock for browser redirects, while `GOOGLE_TOKEN_URL` and `GOOGLE_PEOPLE_API_URL` use the Docker-internal address.
+Implements the full OAuth flow and People/Contact Groups APIs. The backend's `GOOGLE_AUTH_URL` uses `localhost:4020` for browser redirects, while `GOOGLE_TOKEN_URL`, `GOOGLE_PEOPLE_API_URL`, `GOOGLE_GROUPS_API_URL`, and `GOOGLE_PEOPLE_API_BASE_URL` use Docker-internal addresses (`mock-google:4010`).
 
-Admin endpoints for test assertions:
+API endpoints:
+- `GET /o/oauth2/v2/auth` — OAuth redirect (returns `code` + `state`)
+- `POST /token` — Token exchange (returns mock tokens)
+- `GET /v1/people/me/connections` — List contacts (3 mock contacts)
+- `GET /v1/people/:resourceName` — Get single contact
+- `GET /v1/contactGroups` — List contact groups
+
+Admin endpoints:
 - `GET /__admin/calls` — returns all API calls made to the mock
 - `POST /__admin/reset` — clears the call log
 
 ### Telegram Mock (port 4021)
 
-Implements `sendMessage`, `getMe`, and `setWebhook` endpoints.
+Implements `sendMessage`, `getMe`, and `setWebhook` endpoints. The backend's `TELEGRAM_API_BASE_URL` points to `mock-telegram:4011`.
 
 Admin endpoints:
-- `GET /__admin/messages` — returns all sent messages
+- `GET /__admin/messages` — returns all sent messages (`{ chatId, text, timestamp }`)
 - `POST /__admin/reset` — clears the message log
+
+### Test Helpers
+
+Helper modules wrap mock admin APIs for convenient use in test specs:
+
+```ts
+import { resetGoogleMock, getGoogleCalls } from '../helpers/mock-google.helper'
+import { resetTelegramMock, waitForTelegramMessage } from '../helpers/mock-telegram.helper'
+import { clearMessages, waitForMessage } from '../helpers/mailpit.helper'
+```
 
 ## Testing Against Different Versions
 
