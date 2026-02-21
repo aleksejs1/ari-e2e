@@ -42,6 +42,15 @@ export const SEEDED_GROUPS = {
   ],
 } as const
 
+export const MOCK_GOOGLE = {
+  contacts: [
+    { given: 'Google', family: 'Contact-mock-1' },
+    { given: 'Google', family: 'Contact-mock-2' },
+    { given: 'Google', family: 'Contact-mock-3' },
+  ],
+  count: 3,
+} as const
+
 export const SEEDED_NOTIFICATIONS = {
   userA: {
     channel: { type: 'web' },

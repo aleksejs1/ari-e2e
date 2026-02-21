@@ -5,6 +5,7 @@ interface UserContext {
   password: string
   email: string
   token: string
+  userId: number
   page: Page
   apiContext: APIRequestContext
 }
@@ -36,6 +37,7 @@ export const test = base.extend<UserContextFixtures>({
       password,
       email: body.email,
       token: body.token,
+      userId: body.userId,
       page,
       apiContext: request,
     }
