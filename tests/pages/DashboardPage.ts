@@ -19,4 +19,12 @@ export class DashboardPage {
     await this.openUserMenu()
     await this.page.getByTestId('user-menu-logout').click()
   }
+
+  async expectWidget(id: string) {
+    await expect(this.page.getByTestId(`widget-${id}`)).toBeVisible()
+  }
+
+  async expectWidgetContains(id: string, text: string) {
+    await expect(this.page.getByTestId(`widget-${id}`)).toContainText(text)
+  }
 }
