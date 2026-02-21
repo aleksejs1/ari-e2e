@@ -1,0 +1,67 @@
+name: ari-e2e-sqlite
+
+services:
+  app:
+    image: ${ARI_IMAGE:-}
+    build:
+      context: ${ARI_SOURCE_DIR:-../../ari}
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${APP_PORT:-8081}:8080"
+    environment:
+      APP_ENV: e2e
+      APP_DEBUG: "0"
+      DB_CONNECTION: sqlite
+      CORS_ALLOW_ORIGIN: "^https?://.*$$"
+      MAILER_DSN: "smtp://mailpit:1025"
+      MESSENGER_TRANSPORT_DSN: "doctrine://default?auto_setup=0"
+      DEFAULT_URI: "http://localhost:${APP_PORT:-8081}"
+      GOOGLE_AUTH_URL: "http://localhost:${MOCK_GOOGLE_PORT:-4020}/o/oauth2/v2/auth"
+      GOOGLE_TOKEN_URL: "http://mock-google:4010/token"
+      GOOGLE_PEOPLE_API_URL: "http://mock-google:4010/v1/people/me/connections"
+      GOOGLE_GROUPS_API_URL: "http://mock-google:4010/v1/contactGroups"
+      GOOGLE_CLIENT_ID: "e2e-google-client-id"
+      GOOGLE_CLIENT_SECRET: "e2e-google-client-secret"
+      GOOGLE_REDIRECT_URI: "http://localhost:${APP_PORT:-8081}/api/connect/google/callback"
+      TELEGRAM_BOT_TOKEN: "e2e-telegram-bot-token"
+      TELEGRAM_API_BASE_URL: "http://mock-telegram:4011"
+      E2E_MODE: "1"
+      DISABLE_CRON: "1"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "${MAILPIT_PORT:-8026}:8025"
+    environment:
+      MP_MAX_MESSAGES: 100
+      MP_DATABASE: /tmp/mailpit.db
+
+  mock-google:
+    build:
+      context: ./mock-google
+    ports:
+      - "${MOCK_GOOGLE_PORT:-4020}:4010"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4010/__admin/calls"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
+
+  mock-telegram:
+    build:
+      context: ./mock-telegram
+    ports:
+      - "${MOCK_TELEGRAM_PORT:-4021}:4011"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4011/__admin/messages"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
