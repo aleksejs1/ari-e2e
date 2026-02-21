@@ -41,3 +41,10 @@ export const SEEDED_GROUPS = {
     { name: 'Private Group', color: '#a855f7' },
   ],
 } as const
+
+export const SEEDED_NOTIFICATIONS = {
+  userA: {
+    channel: { type: 'web' },
+    policy: { name: 'Birthday Reminders' },
+  },
+} as const
