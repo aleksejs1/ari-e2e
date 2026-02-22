@@ -8,7 +8,7 @@ export class ContactDetailsPage {
   }
 
   async expectName(name: string) {
-    await expect(this.page.getByText(name)).toBeVisible()
+    await expect(this.page.getByText(name).first()).toBeVisible()
   }
 
   async exportVcard(): Promise<Download> {
