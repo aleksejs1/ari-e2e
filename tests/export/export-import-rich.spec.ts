@@ -116,17 +116,14 @@ test.describe('Export/Import Rich Contact Data @export @critical @slow', () => {
       // === Phase 5: Import via UI (User B) ===
       await page.goto('/settings/data')
 
-      const dialogPromise = page.waitForEvent('dialog')
-
       const [fileChooser] = await Promise.all([
         page.waitForEvent('filechooser'),
         page.getByTestId('import-data-button').click(),
       ])
       await fileChooser.setFiles(filePath)
 
-      // Wait for import to complete (success alert dialog)
-      const dialog = await dialogPromise
-      await dialog.accept()
+      // Wait for import to complete (inline success Alert replaces legacy alert())
+      await expect(page.getByText('Contacts imported successfully.')).toBeVisible({ timeout: 30000 })
 
       // === Phase 6: Verify in UI (User B) ===
       const contactsList = new ContactsListPage(page)
