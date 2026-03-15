@@ -165,6 +165,57 @@ expect(msg.Subject).toContain('expected subject')
 | `helpers/mailpit.helper.ts` | `clearMessages()`, `getMessages()`, `waitForMessage({ to?, subject?, timeout? })` |
 | `helpers/auth.helper.ts` | `loginAs(page, uuid, password)` |
 
+## API Key Testing
+
+### Rate-limit header assertions
+
+Every response from an API key session includes `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers. To assert them in a test:
+
+```ts
+const response = await apiContext.get('/api/contacts', {
+  headers: { Authorization: `Bearer ${apiKeyToken}` },
+})
+expect(response.headers()['x-ratelimit-limit']).toBeDefined()
+expect(response.headers()['x-ratelimit-remaining']).toBeDefined()
+```
+
+### Triggering a 429 in tests
+
+The default rate limit is 1 000 req/hour — impractical to exhaust in a test. Set `API_KEY_RATE_LIMIT=5` in the E2E environment to lower the limit to 5 requests per minute:
+
+```yaml
+# docker/compose.e2e.yaml
+app:
+  environment:
+    API_KEY_RATE_LIMIT: 5
+```
+
+Then make 6 requests with the same key and assert the 6th returns `429 Too Many Requests`.
+
+### Scope isolation pattern
+
+```ts
+test('read-only key cannot create contacts @api-keys', async ({ userContext }) => {
+  // 1. Create a key with contacts:read scope only
+  const resp = await userContext.apiContext.post('/api/api_keys', {
+    data: { name: 'Read-only', scopes: ['contacts:read'] },
+    headers: { Authorization: `Bearer ${userContext.token}` },
+  })
+  const { token } = await resp.json()
+
+  // 2. Attempt a POST with the restricted key
+  const create = await userContext.apiContext.post('/api/contacts', {
+    data: {},
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect(create.status()).toBe(403)
+})
+```
+
+### Tenant isolation pattern
+
+A key created by User A must not be usable by User B (different tenant). The `ApiKey` entity implements `TenantAwareInterface`, so `TenantFilter` applies automatically.
+
 ## Configurable Backend URLs
 
 All external service URLs are configurable via environment variables with production defaults:
