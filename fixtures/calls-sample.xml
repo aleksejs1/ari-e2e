@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal SMS Backup & Restore calls fixture for E2E tests.
+  Contact: Alice (+37129837434) — 2 calls on different timestamps.
+  Expected result: 2 ContactInteraction records of type "call".
+-->
+<calls count="2">
+  <call number="+37129837434" type="1" date="1672617600000" duration="36" contact_name="Alice" readable_date="Jan 2, 2023 00:00:00" />
+  <call number="+37129837434" type="2" date="1672704000000" duration="120" contact_name="Alice" readable_date="Jan 3, 2023 00:00:00" />
+</calls>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal SMS Backup & Restore fixture for E2E tests.
+  Contact: Alice (+37129837434) — 3 messages on the same UTC day (2023-01-01).
+  Expected result: 1 ContactInteraction of type "message".
+-->
+<smses count="3">
+  <sms address="+37129837434" type="1" date="1672531200000" contact_name="Alice" body="Hello" readable_date="Jan 1, 2023 00:00:00" />
+  <sms address="+37129837434" type="2" date="1672534800000" contact_name="Alice" body="Hi back" readable_date="Jan 1, 2023 01:00:00" />
+  <sms address="+37129837434" type="1" date="1672538400000" contact_name="Alice" body="How are you?" readable_date="Jan 1, 2023 02:00:00" />
+</smses>
